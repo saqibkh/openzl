@@ -1,9 +1,9 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
-# cmake-ci does not set OPENZL_BUILD_GPU, so it skips contrib/gpu. This
-# workflow verifies that contrib/gpu builds as C++17. GitHub-hosted runners
-# have no GPU, and the contrib/gpu tests do not skip without one, so this
-# workflow does not run them.
+# cmake-ci does not set OPENZL_BUILD_GPU, so it skips contrib/gpu. The
+# gpu-build job verifies that contrib/gpu builds as C++17. GitHub-hosted
+# runners have no GPU, and the contrib/gpu tests do not skip without one, so
+# gpu-build does not run them. The gpu-test job runs them on a simulated GPU.
 
 name: gpu-ci
 
@@ -60,3 +60,29 @@ jobs:
 
       - name: Build
         run: cmake --build build-gpu -j$(getconf _NPROCESSORS_ONLN)
+
+  gpu-test:
+    name: GPU tests (simulated GPU)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # PantheonSim simulates the GPU on the runner's CPU. It checks results,
+      # not speed. The pin is a full commit SHA (setup-pantheonsim v0.1.3).
+      - name: Set up CUDA and a simulated A100
+        uses: pantheongpu/setup-pantheonsim@23932d9b811269d55c8d65687332fefc65daeb2c
+        with:
+          gpu: nvidia/a100
+          cuda-toolkit: '12.8'
+
+      # Shared CUDA runtime: the simulator stands in for it at run time.
+      # Architecture 80 embeds PTX, which the simulator runs.
+      - name: Configure
+        run: cmake -DOPENZL_BUILD_GPU=ON -DOPENZL_BUILD_TESTS=ON -DCMAKE_CUDA_ARCHITECTURES=80 -DCMAKE_CUDA_RUNTIME_LIBRARY=Shared -B build-gpu
+
+      - name: Build
+        run: cmake --build build-gpu --target test_openzl_gpu -j$(getconf _NPROCESSORS_ONLN)
+
+      - name: Test
+        run: ctest --test-dir build-gpu/contrib/gpu --output-on-failure
