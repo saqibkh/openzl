@@ -25,8 +25,14 @@ list(FILTER gpu_sources EXCLUDE REGEX "/(tests|bench)/")
 add_library(openzl_gpu ${gpu_sources})
 # CMake links the static CUDA runtime into every target with .cu sources, so
 # openzl_gpu must use the same one. Two runtimes in one binary do not share
-# kernel registrations or device state.
-target_link_libraries(openzl_gpu PUBLIC openzl openzl_cpp CUDA::cudart_static)
+# kernel registrations or device state. Static is the default;
+# -DCMAKE_CUDA_RUNTIME_LIBRARY=Shared selects the shared runtime for both.
+if (CMAKE_CUDA_RUNTIME_LIBRARY STREQUAL "Shared")
+    set(openzl_gpu_cudart CUDA::cudart)
+else()
+    set(openzl_gpu_cudart CUDA::cudart_static)
+endif()
+target_link_libraries(openzl_gpu PUBLIC openzl openzl_cpp ${openzl_gpu_cudart})
 apply_openzl_compile_options_to_target(openzl_gpu)
 
 add_executable(bench_decode_bf16
